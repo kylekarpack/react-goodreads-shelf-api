@@ -1,3 +1,5 @@
+import { HTMLElement, parse } from 'node-html-parser';
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const forwardedRequest = new Request(request);
@@ -12,57 +14,10 @@ export default {
     const body = await res.text();
 
     const { html, status } = parseJsonP(body);
-    const table = `<table class="delimiter">${html}</table>`;
+    const table = `<table>${html}</table>`;
 
-    const data: any = await stream(table);
-
-    return new Response(JSON.stringify(data));
+    return new Response(JSON.stringify(getBooksFromHtml(table, 100)));
   },
-};
-
-const stream = async (table: string): Promise<any> => {
-  const data: any[] = [];
-
-  let curIndex = 0;
-  const all = {};
-
-  return new Promise((resolve, reject) => {
-    new HTMLRewriter()
-      .on('table.delimiter', {
-        element(element) {
-          element.onEndTag(() => {
-            resolve(data);
-          });
-        },
-      })
-      .on('tr.review', {
-        element(element) {
-          data[curIndex] = {};
-          element.onEndTag(() => {
-            curIndex++;
-          });
-        },
-      })
-      .on('td.field.isbn .value', {
-        text(element) {
-          data[curIndex].isbn = data[curIndex].isbn ?? '';
-          data[curIndex].isbn += element.text.trim();
-        },
-      })
-      .on('td.field.asin .value', {
-        text(element) {
-          data[curIndex].asin = data[curIndex].asin ?? '';
-          data[curIndex].asin += element.text.trim();
-        },
-      })
-      .on('td.field.title a', {
-        element(element) {
-          data[curIndex].title = element.getAttribute('title');
-        },
-      })
-
-      .transform(new Response(table));
-  });
 };
 
 const parseJsonP = (jsonp: string): { html: string; status: any } => {
@@ -80,6 +35,21 @@ const parseJsonP = (jsonp: string): { html: string; status: any } => {
       total: parseInt(matches?.groups?.total ?? '0'),
     },
   };
+};
+
+export const getBooksFromHtml = (html: string, width: string | number | undefined = 150): any[] => {
+  const goodreadsDocument = parse(html);
+
+  const bookElements = goodreadsDocument.querySelectorAll('tr');
+  const bookArray = Array.from(bookElements);
+  // Get width if not a number
+  let newWidth: number;
+  if (typeof width !== 'number') {
+    newWidth = parseInt(width) || 100;
+  } else {
+    newWidth = width;
+  }
+  return bookArray.map((el) => bookMapper(el, newWidth));
 };
 
 const bookMapper = (row: HTMLElement, thumbnailWidth: number): any => {
