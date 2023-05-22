@@ -12,7 +12,9 @@ crate-type = ["cdylib"]
 
 [dependencies]
 reqwest = "0.11.18"
+scraper = "0.16.0"
 worker = "0.0.15"
+getrandom = { version = "0.2", features = ["js"] }
 
 [profile.release]
 lto = true
