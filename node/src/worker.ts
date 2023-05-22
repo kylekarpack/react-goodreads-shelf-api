@@ -15,7 +15,12 @@ export default {
 
     const body = await res.text();
 
-    const { html, status } = parseJsonP(body);
+    const parsed = parseJsonP(body);
+    if (!parsed) {
+      return new Response('Bad request', { status: 400, statusText: 'Bad request' });
+    }
+
+    const { html, status } = parsed;
     const table = `<table>${html}</table>`;
 
     const data: Book[] = await stream(table);
@@ -90,11 +95,16 @@ const stream = async (table: string): Promise<Book[]> => {
   });
 };
 
-const parseJsonP = (jsonp: string): { html: string; status: Partial<Status> } => {
+const parseJsonP = (jsonp: string): { html: string; status: Partial<Status> } | null => {
   const [html, status] = jsonp.split('\n');
 
   const json = html.replace('Element.insert("booksBody", ', '').replace(' });', '}').replace('bottom', '"bottom"');
-  const output: string = JSON.parse(json).bottom;
+  let output: string;
+  try {
+    output = JSON.parse(json).bottom;
+  } catch {
+    return null;
+  }
 
   const matches = status.match(/(?<end>\d*) of (?<total>\d*) loaded/);
   return {
