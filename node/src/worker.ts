@@ -12,8 +12,6 @@ export default {
 
     const body = await res.text();
 
-    console.log(body);
-
     return new Response(JSON.stringify(getBooksFromHtml(body, 100)));
   },
 };
