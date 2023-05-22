@@ -1,46 +1,84 @@
-/**
- * Welcome to Cloudflare Workers! This is your first worker.
- *
- * - Run `npm run dev` in your terminal to start a development server
- * - Open a browser tab at http://localhost:8787/ to see your worker in action
- * - Run `npm run deploy` to publish your worker
- *
- * Learn more at https://developers.cloudflare.com/workers/
- */
+import { HTMLElement, parse } from 'node-html-parser';
 
-import handleProxy from './proxy';
-import handleRedirect from './redirect';
-import apiRouter from './router';
-
-// Export a default object containing event handlers
 export default {
-	// The fetch handler is invoked when this worker receives a HTTP(S) request
-	// and should return a Response (optionally wrapped in a Promise)
-	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-		// You'll find it helpful to parse the request.url string into a URL object. Learn more at https://developer.mozilla.org/en-US/docs/Web/API/URL
-		const url = new URL(request.url);
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const url = new URL(request.url);
 
-		// You can get pretty far with simple logic like if/switch-statements
-		switch (url.pathname) {
-			case '/redirect':
-				return handleRedirect.fetch(request, env, ctx);
+    // make subrequests with the global `fetch()` function
+    let res = await fetch(
+      'https://www.goodreads.com/review/list/63515611-kyle?order=d&amp;page=1&amp;shelf=read&amp;sort=date_read',
+      request
+    );
 
-			case '/proxy':
-				return handleProxy.fetch(request, env, ctx);
-		}
+    const body = await res.text();
 
-		if (url.pathname.startsWith('/api/')) {
-			// You can also use more robust routing
-			return apiRouter.handle(request);
-		}
+    console.log(body);
 
-		return new Response(
-			`Try making requests to:
-      <ul>
-      <li><code><a href="/redirect?redirectUrl=https://example.com/">/redirect?redirectUrl=https://example.com/</a></code>,</li>
-      <li><code><a href="/proxy?modify&proxyUrl=https://example.com/">/proxy?modify&proxyUrl=https://example.com/</a></code>, or</li>
-      <li><code><a href="/api/todos">/api/todos</a></code></li>`,
-			{ headers: { 'Content-Type': 'text/html' } }
-		);
-	},
+    return new Response(JSON.stringify(getBooksFromHtml(body, 100)));
+  },
 };
+
+export const getBooksFromHtml = (html: string, width: string | number | undefined = 150): any[] => {
+  const goodreadsDocument = parse(html);
+
+  const bookElements = goodreadsDocument.querySelectorAll('tr');
+  const bookArray = Array.from(bookElements);
+  // Get width if not a number
+  let newWidth: number;
+  if (typeof width !== 'number') {
+    newWidth = parseInt(width) || 100;
+  } else {
+    newWidth = width;
+  }
+  return bookArray.map((el) => bookMapper(el, newWidth));
+};
+
+const bookMapper = (row: HTMLElement, thumbnailWidth: number): any => {
+  const isbn = row?.querySelector('td.field.isbn .value')?.textContent?.trim();
+  const asin = row?.querySelector('td.field.asin .value')?.textContent?.trim();
+  let title = row?.querySelector('td.field.title a')?.getAttribute('title') ?? '';
+  const author = row?.querySelector('td.field.author .value')?.textContent?.trim().replace(' *', '').split(', ').reverse().join(' ');
+  const imageUrl = row
+    ?.querySelector('td.field.cover img')
+    ?.getAttribute('src')
+    // Get a thumbnail of the requested width
+    // Add some padding factor for higher-quality rendering
+    ?.replace(/\._(S[Y|X]\d+_?){1,2}_/i, `._SX${thumbnailWidth * 2}_`);
+  const href = row?.querySelector('td.field.cover a')?.getAttribute('href');
+  const rating = row?.querySelectorAll('td.field.rating .staticStars .p10')?.length;
+
+  const dateReadString = row?.querySelector('td.field.date_read .date_read_value')?.textContent;
+  const dateAddedString = row?.querySelector('td.field.date_added span')?.textContent;
+  const dateRead = dateReadString ? new Date(dateReadString) : undefined;
+  const dateAdded = dateAddedString ? new Date(dateAddedString) : undefined;
+
+  let subtitle = '';
+  const splitTitle = title.split(':');
+  if (splitTitle.length > 1) {
+    title = splitTitle[0];
+    subtitle = splitTitle[1];
+  }
+
+  const parens = title.match(/\(.*\)/);
+  if (parens) {
+    const [match] = parens;
+    subtitle = match.replace('(', '').replace(')', '');
+    title = title.replace(match, '');
+  }
+
+  return {
+    id: `${isbn || asin || crypto.randomUUID()}`,
+    isbn,
+    asin,
+    title,
+    subtitle,
+    author,
+    imageUrl,
+    rating,
+    dateRead,
+    dateAdded,
+    link: `https://www.goodreads.com/${href}`,
+  };
+};
+
+//
