@@ -38,7 +38,8 @@ export default {
       const table = `<table>${html}</table>`;
 
       const rawData = await stream(table);
-      const data = rawData.map((el) => bookCleaner(el, Number(url.searchParams.get('imageWidth'))));
+      const imageWidth = url.searchParams.get('imageWidth');
+      const data = rawData.map((el) => bookCleaner(el, Number(imageWidth ?? 100)));
       status.start = status.end! - data.length;
       status.pageSize = data.length;
 

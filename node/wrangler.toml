@@ -1,4 +1,4 @@
-name = "node"
+name = "react-goodreads-shelf"
 main = "src/worker.ts"
 compatibility_date = "2023-05-22"
 
