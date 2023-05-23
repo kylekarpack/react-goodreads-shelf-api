@@ -13,14 +13,22 @@ export default {
     const urlToFetch = `https://www.goodreads.com/review/list/${url.pathname.replace('users/', '')}${url.search}`;
     let res = await fetch(urlToFetch, forwardedRequest);
 
-    const body = await res.text();
-
-    const parsed = parseJsonP(body);
-    if (!parsed) {
-      return new Response('Bad request', { status: 400, statusText: 'Bad request' });
+    // Simulate success if we get a 204 No Content response
+    if (res.status === 204) {
+      return new Response(
+        JSON.stringify({
+          books: [],
+          status: {
+            end: Number(url.searchParams.get('page')) * 30,
+            total: 0,
+          },
+        })
+      );
     }
 
-    const { html, status } = parsed;
+    const body = await res.text();
+    const { html, status } = parseJsonP(body);
+
     const table = `<table>${html}</table>`;
 
     const data: Book[] = await stream(table);
@@ -95,16 +103,11 @@ const stream = async (table: string): Promise<Book[]> => {
   });
 };
 
-const parseJsonP = (jsonp: string): { html: string; status: Partial<Status> } | null => {
+const parseJsonP = (jsonp: string): { html: string; status: Partial<Status> } => {
   const [html, status] = jsonp.split('\n');
 
   const json = html.replace('Element.insert("booksBody", ', '').replace(' });', '}').replace('bottom', '"bottom"');
-  let output: string;
-  try {
-    output = JSON.parse(json).bottom;
-  } catch {
-    return null;
-  }
+  let output = JSON.parse(json).bottom;
 
   const matches = status.match(/(?<end>\d*) of (?<total>\d*) loaded/);
   return {
