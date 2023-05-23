@@ -13,34 +13,45 @@ export default {
     const urlToFetch = `https://www.goodreads.com/review/list/${url.pathname.replace('users/', '')}${url.search}`;
     let res = await fetch(urlToFetch, forwardedRequest);
 
+    let output: {
+      data: Book[];
+      status: Partial<Status>;
+    };
+
     // Simulate success if we get a 204 No Content response
     if (res.status === 204) {
-      return new Response(
-        JSON.stringify({
-          books: [],
-          status: {
-            end: Number(url.searchParams.get('page')) * 30,
-            total: 0,
-          },
-        })
-      );
-    }
+      const page = Number(url.searchParams.get('page'));
+      const pageSize = 30;
+      output = {
+        data: [],
+        status: {
+          pageSize,
+          start: page * pageSize - pageSize,
+          end: page * pageSize,
+          total: 0,
+        },
+      };
+    } else {
+      const body = await res.text();
+      const { html, status } = parseJsonP(body);
 
-    const body = await res.text();
-    const { html, status } = parseJsonP(body);
+      const table = `<table>${html}</table>`;
 
-    const table = `<table>${html}</table>`;
+      const data: Book[] = await stream(table);
+      status.start = status.end! - data.length;
+      status.pageSize = data.length;
 
-    const data: Book[] = await stream(table);
-    status.start = status.end! - data.length;
-    status.pageSize = data.length;
-
-    return new Response(
-      JSON.stringify({
+      output = {
         data,
         status,
-      })
-    );
+      };
+    }
+
+    const response = new Response(JSON.stringify(output));
+    response.headers.set('Access-Control-Allow-Origin', '*');
+    response.headers.set('Content-Type', 'application/json');
+
+    return response;
   },
 };
 
@@ -93,6 +104,7 @@ const stream = async (table: string): Promise<Book[]> => {
       .on('td.field.cover img', getAttribute('imageUrl', 'src'))
       .on('td.field.date_read .date_read_value', getText('dateRead'))
       .on('td.field.date_added span', getText('dateAdded'))
+      .on('td.field.cover a', getAttribute('link', 'href'))
       .on('td.field.rating .staticStars .p10', {
         element() {
           data[curIndex].rating++;
