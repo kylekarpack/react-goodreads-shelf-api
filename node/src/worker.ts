@@ -37,7 +37,8 @@ export default {
 
       const table = `<table>${html}</table>`;
 
-      const data: Book[] = await stream(table);
+      const rawData = await stream(table);
+      const data = rawData.map((el) => bookCleaner(el, Number(url.searchParams.get('imageWidth'))));
       status.start = status.end! - data.length;
       status.pageSize = data.length;
 
@@ -55,7 +56,7 @@ export default {
   },
 };
 
-const stream = async (table: string): Promise<Book[]> => {
+const stream = async (table: string): Promise<any[]> => {
   const data: any[] = [];
 
   let curIndex = 0;
@@ -78,12 +79,12 @@ const stream = async (table: string): Promise<Book[]> => {
     };
   };
 
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     new HTMLRewriter()
       .on('table', {
         element(element) {
           element.onEndTag(() => {
-            resolve(data.map(bookCleaner));
+            resolve(data);
           });
         },
       })
@@ -131,12 +132,14 @@ const parseJsonP = (jsonp: string): { html: string; status: Partial<Status> } =>
   };
 };
 
-const bookCleaner = (rawBook: any, thumbnailWidth: number): any => {
+const bookCleaner = (rawBook: any, thumbnailWidth: number = 100): any => {
   rawBook.author = rawBook.author?.replace('*', '').split(', ').reverse().join(' ');
   rawBook.imageUrl = rawBook.imageUrl?.replace(/\._(S[Y|X]\d+_?){1,2}_/i, `._SX${thumbnailWidth * 2}_`);
 
   rawBook.dateRead = rawBook.dateRead ? new Date(rawBook.dateRead) : undefined;
   rawBook.dateAdded = rawBook.dateAdded ? new Date(rawBook.dateAdded) : undefined;
+
+  rawBook.link = `https://www.goodreads.com/${rawBook.link}`;
 
   const splitTitle = rawBook.title.split(':');
   if (splitTitle.length > 1) {
