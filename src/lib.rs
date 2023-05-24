@@ -23,7 +23,6 @@ async fn main(req: Request, env: Env, ctx: Context) -> Result<Response> {
         .await
         .expect("Could not get text from response");
 
-    /*
     let mut output = vec![];
 
     let mut rewriter = HtmlRewriter::new(
@@ -43,19 +42,20 @@ async fn main(req: Request, env: Env, ctx: Context) -> Result<Response> {
         |c: &[u8]| output.extend_from_slice(c),
     );
 
-    rewriter.write(response);
-    */
-
     let mut split = response.split("\n");
 
     let html = split
         .next()
-        .expect(("Could not retrieve HTML"))
+        .expect("Could not retrieve HTML")
         .replace("Element.insert(\"booksBody\", ", "")
         .replace(" });", "}")
         .replace("bottom", "\"bottom\"");
 
     let parsed: Jsonp = serde_json::from_str(&html).expect("JSON was not well-formatted");
+
+    let serialized = serde_json::to_string(&parsed).expect("Could not serialize object");
+
+    rewriter.write(&serialized.as_bytes());
 
     let status = split.next();
 
